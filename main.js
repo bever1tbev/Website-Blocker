@@ -10,9 +10,8 @@ window.addEventListener('popstate', function (event) {
 });
 
 function addSite(){
-    // Need to check if real site first to avoid misclicks
+    // Checks if URL is valid
     const site = document.getElementById("siteName").value;
-
     try {
         url = new URL(site);
     } catch (error) {
@@ -21,10 +20,11 @@ function addSite(){
         return;  
     }
 
+    // Checks if URL is already blocked
     if (blocked.includes(site)){
         alert("URL is already blocked");
     } else {
-        // Add to internal list
+        // Add to internal list and local storage
         blocked.add(site);
         localStorage.setItem("site" + (table.rows.length+1), site);
         localStorage.setItem("count", (table.rows.length+1));
@@ -62,14 +62,22 @@ function removeSite(site){
         }
     }
 
+    // Remove from local storage
     saveSites();
 }
 
 function setSchedule(){
+    // Set internal variables
     scheduleLower = document.getElementById("lowerBound").value;
-    localStorage.setItem("lowerBound", scheduleLower);
     scheduleUpper = document.getElementById("upperBound").value;
+
+    // Add to local storage
+    localStorage.setItem("lowerBound", scheduleLower);
     localStorage.setItem("upperBound", scheduleUpper);
+
+    // update current schedule
+    const schedule = "<h4>" + scheduleLower + " to " + scheduleUpper + "</h4>";
+    document.getElementById("currentSchedule").innerHTML = schedule;
 }
 
 function withinSchedule(){
@@ -89,7 +97,7 @@ function checkCurrentSite(){
 
 function update(){
 
-    let schedule = document.getElementById("schedule");
+    let schedule = document.getElementById("setSchedule");
     let tableRows = document.getElementById("blockedTable").rows;
 
     if (!withinSchedule()){
