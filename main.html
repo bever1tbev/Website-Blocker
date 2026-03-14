@@ -1,0 +1,26 @@
+<html>
+  <head>
+    <script src="main.js"></script>
+  </head>
+  <body onload="initialise()" onchange="update()" >
+
+    <h1>Website Blocker</h1>
+
+    <div id="schedule">
+      <h2>Schedule</h2>
+    </div>
+
+    <div>
+      <h2>Add Website</h2>
+      <input type="text" id="siteName">
+      <button onclick="addSite()">Add</button>
+    </div>
+
+    <div>
+      <h2>Blocked Sites</h2>
+      <table id="blockedTable">
+      </table>
+    </div>
+
+  </body>
+</html>
