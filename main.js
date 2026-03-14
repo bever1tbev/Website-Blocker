@@ -1,19 +1,12 @@
-let blocked = new Set();
+let blocked;
 let scheduleUpper;
 let scheduleLower;
-let initialised = false;
-
-window.addEventListener('popstate', function (event) {
-    if (!initialised) initialise(); 
-	// The URL changed...
-    checkCurrentSite();
-});
 
 function addSite(){
     // Checks if URL is valid
-    const site = document.getElementById("siteName").value;
+    let site;
     try {
-        url = new URL(site);
+        site = new URL(document.getElementById("siteName").value).hostname;
     } catch (error) {
         // Pop up or something saying site is not valid
         alert("Provided URL is not valid");
@@ -76,8 +69,7 @@ function setSchedule(){
     localStorage.setItem("upperBound", scheduleUpper);
 
     // update current schedule
-    const schedule = "<h4>" + scheduleLower + " to " + scheduleUpper + "</h4>";
-    document.getElementById("currentSchedule").innerHTML = schedule;
+    document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
 }
 
 function withinSchedule(){
@@ -85,8 +77,7 @@ function withinSchedule(){
 }
 
 function checkCurrentSite(){
-    const currentSite = window.location.href;
-    if (blocked.includes(currentSite) && withinSchedule()){
+    if (blocked.includes(location.href) && withinSchedule()){
         // Pop up saying you've blocked the website
         alert("You have blocked the following site");
 
@@ -125,9 +116,15 @@ function update(){
 }
 
 function initialise(){
+    location.hostname.addListener(checkCurrentSite);
     scheduleLower = localStorage.getItem("lowerBound");
     scheduleUpper = localStorage.getItem("upperBound");
+
+    if (!scheduleLower || !scheduleUpper) document.getElementById("currentSchedule").innerHTML = "No Schedule set";
+    else document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
+
     const rowCount = localStorage.getItem("count");
+    blocked = new Set();
     let site;
     if (rowCount){
         for (let i = rowCount; i > 0; i--){
@@ -138,7 +135,6 @@ function initialise(){
         }
     }
     update();
-    initialised = true;
 }
 
 function saveSites(){
