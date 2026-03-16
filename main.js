@@ -2,6 +2,8 @@ let blocked;
 let scheduleUpper;
 let scheduleLower;
 
+initialise();
+
 function addSite(){
     // Checks if URL is valid
     let site;
@@ -27,6 +29,7 @@ function addSite(){
     }
 }
 
+
 function addSiteGraphic(site){
     let table = document.getElementById("blockedTable");
 
@@ -41,6 +44,7 @@ function addSiteGraphic(site){
     cell1.innerHTML = site;
     cell2.innerHTML = "<button type=\"button\" onclick=\"removeSite('" + site + "')\">Remove</button>";
 }
+
 
 function removeSite(site){
     // Remove from internal list
@@ -59,6 +63,7 @@ function removeSite(site){
     saveSites();
 }
 
+
 function setSchedule(){
     // Set internal variables
     scheduleLower = document.getElementById("lowerBound").value;
@@ -72,19 +77,25 @@ function setSchedule(){
     document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
 }
 
+
 function withinSchedule(){
     return Date.now() >= scheduleLower && Date.now() <= scheduleUpper;
 }
 
-function checkCurrentSite(){
-    if (blocked.includes(location.href) && withinSchedule()){
-        // Pop up saying you've blocked the website
-        alert("You have blocked the following site");
 
-        // Go back
-        history.back();
-    }
+function checkCurrentSite(){
+    chrome.tabs.query({active: true, lastFocusedWindow: true}, tabs => {
+        let url = tabs[0].url;
+        if (blocked.has(url) && withinSchedule()){
+            // Pop up saying you've blocked the website
+            alert("You have blocked the following site");
+
+            // Go back
+            history.back();
+        }
+    });
 }
+
 
 function update(){
 
@@ -115,8 +126,10 @@ function update(){
     
 }
 
+
 function initialise(){
-    location.hostname.addListener(checkCurrentSite);
+    blocked = new Set();
+    chrome.tabs.onUpdated.addListener(checkCurrentSite);
     scheduleLower = localStorage.getItem("lowerBound");
     scheduleUpper = localStorage.getItem("upperBound");
 
@@ -124,7 +137,7 @@ function initialise(){
     else document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
 
     const rowCount = localStorage.getItem("count");
-    blocked = new Set();
+    
     let site;
     if (rowCount){
         for (let i = rowCount; i > 0; i--){
@@ -136,6 +149,7 @@ function initialise(){
     }
     update();
 }
+
 
 function saveSites(){
     localStorage.clear();
