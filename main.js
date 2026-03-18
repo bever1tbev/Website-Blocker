@@ -1,8 +1,37 @@
 let blocked;
 let scheduleUpper;
 let scheduleLower;
+let rowCount;
+
+localStorage.clear();
 
 initialise();
+
+function initialise(){
+    blocked = new Set();
+    chrome.tabs.onUpdated.addListener(checkCurrentSite);
+    scheduleLower = localStorage.getItem("lowerBound");
+    scheduleUpper = localStorage.getItem("upperBound");
+
+    document.getElementById("addSite").addEventListener("click", addSite);
+
+    if (!scheduleLower || !scheduleUpper) document.getElementById("currentSchedule").innerHTML = "No Schedule set";
+    else document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
+
+    rowCount = localStorage.getItem("count");
+    
+    let site;
+    if (rowCount){
+        for (let i = rowCount; i > 0; i--){
+            site = localStorage.getItem("site" + i);
+            blocked.add(site);
+            // Add it to table
+            addSiteGraphic(site);
+        }
+    }
+    
+    update();
+}
 
 function addSite(){
     // Checks if URL is valid
@@ -16,13 +45,15 @@ function addSite(){
     }
 
     // Checks if URL is already blocked
-    if (blocked.includes(site)){
+    if (blocked.has(site)){
         alert("URL is already blocked");
     } else {
         // Add to internal list and local storage
         blocked.add(site);
-        localStorage.setItem("site" + (table.rows.length+1), site);
-        localStorage.setItem("count", (table.rows.length+1));
+
+        rowCount++;
+        localStorage.setItem("site" + rowCount, site);
+        localStorage.setItem("count", rowCount);
 
         // Add it to table
         addSiteGraphic(site);
@@ -39,42 +70,61 @@ function addSiteGraphic(site){
     // Insert new cells (<td> elements) at the 1st and 2nd position of the "new" <tr> element:
     let cell1 = row.insertCell(0);
     let cell2 = row.insertCell(1);
+    let cell3 = row.insertCell(2);
 
     // Add some text to the new cells:
-    cell1.innerHTML = site;
-    cell2.innerHTML = "<button type=\"button\" onclick=\"removeSite('" + site + "')\">Remove</button>";
+    cell1.innerHTML = rowCount;
+    cell2.innerHTML = site;
+    cell3.innerHTML = "<button type=\"button\" id=\"removeSite" + rowCount + "\">Remove</button>";
+    document.getElementById("removeSite" + rowCount).addEventListener("click", removeSite(rowCount));
 }
 
 
-function removeSite(site){
-    // Remove from internal list
-    blocked.remove(site);
-
+function removeSite(index){
     // Remove it from table
     let table = document.getElementById("blockedTable");
-    for (let i = 0; i < tableRows.length; i++){
-        if (table.rows[i].cells[0].innerHTML === site){
-            table.deleteRow(i);
-            break;
-        }
-    }
+    let site = table.rows[index-1].cells[0].innerHTML;
+
+    // Remove from internal list
+    blocked.delete(site);
+
+    table.deleteRow(index-1);
 
     // Remove from local storage
     saveSites();
 }
 
-
-function setSchedule(){
-    // Set internal variables
-    scheduleLower = document.getElementById("lowerBound").value;
-    scheduleUpper = document.getElementById("upperBound").value;
-
-    // Add to local storage
+function saveSites(){
+    localStorage.clear();
     localStorage.setItem("lowerBound", scheduleLower);
     localStorage.setItem("upperBound", scheduleUpper);
 
-    // update current schedule
-    document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
+    if (blocked.size != 0){
+        localStorage.setItem("count", rowCount);
+        const blockedArr = Array.from(blocked);
+        for (let i = 1; i < blockedArr.length+1; i++) {
+            localStorage.setItem("site"+i, blockedArr[i-1]);
+        }
+    }
+}
+
+
+function setSchedule(){
+    const lowerBound = document.getElementById("lowerBound").value;
+    const upperBound = document.getElementById("upperBound").value;
+    if (lowerBound && upperBound){
+        // Set internal variables
+        scheduleLower = lowerBound;
+        scheduleUpper = upperBound;
+
+        // Add to local storage
+        localStorage.setItem("lowerBound", scheduleLower);
+        localStorage.setItem("upperBound", scheduleUpper);
+
+        // update current schedule
+        document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
+    }
+    update();
 }
 
 
@@ -106,11 +156,15 @@ function update(){
 
         schedule.innerHTML = "<input type=\"time\" id=\"lowerBound\" required>"
         + "<input type=\"time\" id=\"upperBound\" required>"
-        + "<button onclick=\"setSchedule()\">Set Schedule</button>";
+        + "<button id=\"scheduleButton\">Set Schedule</button>";
+
+        document.getElementById("scheduleButton").addEventListener("click", setSchedule);
+
 
         // Replace nothing with removal button
         for (let i = 0; i < tableRows.length; i++){
-            tableRows[i].cells[1].innerHTML = "<button type=\"button\" onclick=\"removeSite('" + tableRows[i].cells[0].innerHTML + "')\">Remove</button>";;
+            tableRows[i].cells[2].innerHTML = "<button type=\"button\" id=\"removeSite" + i+1 + "\">Remove</button>";
+            document.getElementById("removeSite" + i+1).addEventListener("click", removeSite(i+1));
         }
 
     } else {
@@ -119,50 +173,11 @@ function update(){
 
         // Replace removal button from each row with nothing
         for (let i = 0; i < tableRows.length; i++){
-            tableRows[i].cells[1].innerHTML = "";
+            tableRows[i].cells[2].innerHTML = "";
         }
 
     }
     
-}
-
-
-function initialise(){
-    blocked = new Set();
-    chrome.tabs.onUpdated.addListener(checkCurrentSite);
-    scheduleLower = localStorage.getItem("lowerBound");
-    scheduleUpper = localStorage.getItem("upperBound");
-
-    if (!scheduleLower || !scheduleUpper) document.getElementById("currentSchedule").innerHTML = "No Schedule set";
-    else document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
-
-    const rowCount = localStorage.getItem("count");
-    
-    let site;
-    if (rowCount){
-        for (let i = rowCount; i > 0; i--){
-            site = localStorage.getItem("site" + i);
-            blocked.add(site);
-            // Add it to table
-            addSiteGraphic(site);
-        }
-    }
-    update();
-}
-
-
-function saveSites(){
-    localStorage.clear();
-    localStorage.setItem("lowerBound", scheduleLower);
-    localStorage.setItem("upperBound", scheduleUpper);
-
-    if (blocked.size != 0){
-        localStorage.setItem("count", blocked.size);
-        const blockedArr = Array.from(blocked);
-        for (let i = 1; i < blockedArr.length+1; i++) {
-            localStorage.setItem("site"+i, blockedArr[i-1]);
-        }
-    }
 }
 
 /*
