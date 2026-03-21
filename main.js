@@ -3,30 +3,31 @@ let scheduleUpper;
 let scheduleLower;
 let rowCount;
 
-localStorage.clear();
-
 initialise();
 
+checkCurrentSite();
+
 function initialise(){
-    blocked = new Set();
+    blocked = [];
     chrome.tabs.onUpdated.addListener(checkCurrentSite);
     scheduleLower = localStorage.getItem("lowerBound");
     scheduleUpper = localStorage.getItem("upperBound");
 
     document.getElementById("addSite").addEventListener("click", addSite);
 
-    if (!scheduleLower || !scheduleUpper) document.getElementById("currentSchedule").innerHTML = "No Schedule set";
-    else document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
+    if (scheduleLower && scheduleUpper) document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
+    else document.getElementById("currentSchedule").innerHTML = "No Schedule set";
 
-    rowCount = localStorage.getItem("count");
+    const count = localStorage.getItem("count");
+    if (count) rowCount = count;
+    else rowCount = 0;
     
-    let site;
-    if (rowCount){
+    if (rowCount != 0){
+        let site;
         for (let i = rowCount; i > 0; i--){
             site = localStorage.getItem("site" + i);
-            blocked.add(site);
-            // Add it to table
-            addSiteGraphic(site);
+            blocked.push(site);
+            addSiteGraphic(site, i);
         }
     }
     
@@ -45,45 +46,46 @@ function addSite(){
     }
 
     // Checks if URL is already blocked
-    if (blocked.has(site)){
+    if (blocked.includes(site)){
         alert("URL is already blocked");
     } else {
         // Add to internal list and local storage
-        blocked.add(site);
+        blocked.push(site);
 
         rowCount++;
         localStorage.setItem("site" + rowCount, site);
         localStorage.setItem("count", rowCount);
 
         // Add it to table
-        addSiteGraphic(site);
+        addSiteGraphic(site, rowCount);
     }
 }
 
 
-function addSiteGraphic(site){
-    let table = document.getElementById("blockedTable");
+function addSiteGraphic(site, index){
+    const table = document.getElementById("blockedTable");
 
     // Create an empty <tr> element and add it to the 1st position of the table:
-    let row = table.insertRow(0);
+    const row = table.insertRow(0);
 
     // Insert new cells (<td> elements) at the 1st and 2nd position of the "new" <tr> element:
-    let cell1 = row.insertCell(0);
-    let cell2 = row.insertCell(1);
-    let cell3 = row.insertCell(2);
+    const cell1 = row.insertCell(0);
+    const cell2 = row.insertCell(1);
+    const cell3 = row.insertCell(2);
 
     // Add some text to the new cells:
-    cell1.innerHTML = rowCount;
+    cell1.innerHTML = index;
     cell2.innerHTML = site;
-    cell3.innerHTML = "<button type=\"button\" id=\"removeSite" + rowCount + "\">Remove</button>";
-    document.getElementById("removeSite" + rowCount).addEventListener("click", removeSite(rowCount));
+    if (!withinSchedule()){
+        cell3.innerHTML = "<button type=\"button\" id=\"removeSite" + index + "\">Remove</button>";
+        document.getElementById("removeSite" + index).addEventListener("click", removeSite(index));
+    }
 }
 
 
 function removeSite(index){
     // Remove it from table
-    let table = document.getElementById("blockedTable");
-    let site = table.rows[index-1].cells[0].innerHTML;
+    const site = document.getElementById("blockedTable").rows[index-1].cells[1].innerHTML;
 
     // Remove from internal list
     blocked.delete(site);
@@ -94,16 +96,19 @@ function removeSite(index){
     saveSites();
 }
 
-function saveSites(){
+function saveSites(){ // this needs work
     localStorage.clear();
-    localStorage.setItem("lowerBound", scheduleLower);
-    localStorage.setItem("upperBound", scheduleUpper);
+    if (scheduleLower && scheduleUpper){
+        localStorage.setItem("lowerBound", scheduleLower);
+        localStorage.setItem("upperBound", scheduleUpper);
+    }
 
-    if (blocked.size != 0){
+    if (blocked.length != 0){
         localStorage.setItem("count", rowCount);
-        const blockedArr = Array.from(blocked);
-        for (let i = 1; i < blockedArr.length+1; i++) {
-            localStorage.setItem("site"+i, blockedArr[i-1]);
+        const rows = document.getElementById("blockedTable").rows;
+        for (let i = 0; i < rows.length; i++) {
+            rows[i].cells[0].innerHTML = i+1;
+            localStorage.setItem("site"+i+1, rows[i].cells[1].innerHTML);
         }
     }
 }
@@ -129,19 +134,27 @@ function setSchedule(){
 
 
 function withinSchedule(){
-    return Date.now() >= scheduleLower && Date.now() <= scheduleUpper;
+    if (scheduleLower && scheduleUpper){
+        const lowerBound = Temporal.PlainTime.from(scheduleLower);
+        const upperBound = Temporal.PlainTime.from(scheduleUpper);
+        const now = Temporal.Now.plainTimeISO();
+
+        return (Temporal.PlainTime.compare(now, upperBound) == -1 && Temporal.PlainTime.compare(now, lowerBound) == 1)
+        || Temporal.PlainTime.compare(now, upperBound) == 0
+        || Temporal.PlainTime.compare(now, lowerBound) == 0;
+    }
+    return false;
 }
 
 
 function checkCurrentSite(){
     chrome.tabs.query({active: true, lastFocusedWindow: true}, tabs => {
-        let url = tabs[0].url;
-        if (blocked.has(url) && withinSchedule()){
-            // Pop up saying you've blocked the website
-            alert("You have blocked the following site");
-
-            // Go back
-            history.back();
+        const url = new URL(tabs[0].url).hostname;
+        if (blocked.includes(url) && withinSchedule()){
+            console.log("blocked site");
+            chrome.tabs.remove(
+                tabs[0].id,
+            ).catch(function(e){console.log(e)});
         }
     });
 }
@@ -149,13 +162,13 @@ function checkCurrentSite(){
 
 function update(){
 
-    let schedule = document.getElementById("setSchedule");
-    let tableRows = document.getElementById("blockedTable").rows;
+    const schedule = document.getElementById("setSchedule");
+    const tableRows = document.getElementById("blockedTable").rows;
 
     if (!withinSchedule()){
 
-        schedule.innerHTML = "<input type=\"time\" id=\"lowerBound\" required>"
-        + "<input type=\"time\" id=\"upperBound\" required>"
+        schedule.innerHTML = "<input type=\"time\" id=\"lowerBound\">"
+        + "<input type=\"time\" id=\"upperBound\">"
         + "<button id=\"scheduleButton\">Set Schedule</button>";
 
         document.getElementById("scheduleButton").addEventListener("click", setSchedule);
