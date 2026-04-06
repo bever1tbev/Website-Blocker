@@ -1,44 +1,53 @@
-let blocked;
-let scheduleUpper;
-let scheduleLower;
-let rowCount;
+
 
 initialise();
 
-checkCurrentSite();
-
 function initialise(){
-    blocked = [];
-    chrome.tabs.onUpdated.addListener(checkCurrentSite);
-    scheduleLower = localStorage.getItem("lowerBound");
-    scheduleUpper = localStorage.getItem("upperBound");
-
-    document.getElementById("addSite").addEventListener("click", addSite);
+    
+    // Current Schedule
+    let scheduleLower, scheduleUpper;
+    chrome.storage.local.get(["lowerBound"]).then((result) => {
+        scheduleLower = result.key;
+    });
+    chrome.storage.local.get(["upperBound"]).then((result) => {
+        scheduleUpper = result.key;
+    });
 
     if (scheduleLower && scheduleUpper) document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
     else document.getElementById("currentSchedule").innerHTML = "No Schedule set";
 
-    const count = localStorage.getItem("count");
-    if (count) rowCount = count;
-    else rowCount = 0;
+    // Blocked Sites
+    let count;
+    chrome.storage.local.get(["count"]).then((result) => {
+        count = result.key;
+    });
     
-    if (rowCount != 0){
+    if (count){
         let site;
-        for (let i = rowCount; i > 0; i--){
-            site = localStorage.getItem("site" + i);
-            blocked.push(site);
-            addSiteGraphic(site, i);
+        for (let i = count; i > 0; i--){
+            let key = "site" + i;
+            chrome.storage.local.get([key]).then((result) => {
+                site = result.key;
+            });
+            tableAdd(site);
         }
     }
-    
+
+    // Set Schedule
     update();
+
+    // Add Website
+    document.getElementById("addSite").addEventListener("click", addSite);
+    
 }
 
 function addSite(){
+    let url = document.getElementById("siteName").value;
+    if (!url.startsWith("https://")) url = "https://" + url;
     // Checks if URL is valid
     let site;
     try {
-        site = new URL(document.getElementById("siteName").value).hostname;
+        site = new URL(url).hostname;
     } catch (error) {
         // Pop up or something saying site is not valid
         alert("Provided URL is not valid");
@@ -46,94 +55,137 @@ function addSite(){
     }
 
     // Checks if URL is already blocked
-    if (blocked.includes(site)){
+    if (siteIsBlocked(site)){
         alert("URL is already blocked");
     } else {
-        // Add to internal list and local storage
-        blocked.push(site);
-
-        rowCount++;
-        localStorage.setItem("site" + rowCount, site);
-        localStorage.setItem("count", rowCount);
-
         // Add it to table
-        addSiteGraphic(site, rowCount);
+        let count;
+        chrome.storage.local.get(["count"]).then((result) => {
+            count = result.key;
+        });
+        if (!count) count = 0;
+        count = Number(count) + 1;
+    
+        const forSet = "site" + count;
+        chrome.storage.local.set({ forSet : site }).then(() => {});
+        chrome.storage.local.set({ "count": count }).then(() => {});
+        tableAdd(site);
+        update();
     }
 }
 
 
-function addSiteGraphic(site, index){
+function tableAdd(site){
     const table = document.getElementById("blockedTable");
-
+    
     // Create an empty <tr> element and add it to the 1st position of the table:
-    const row = table.insertRow(0);
+    const row = table.insertRow(table.rows.length);
 
     // Insert new cells (<td> elements) at the 1st and 2nd position of the "new" <tr> element:
     const cell1 = row.insertCell(0);
     const cell2 = row.insertCell(1);
-    const cell3 = row.insertCell(2);
 
     // Add some text to the new cells:
-    cell1.innerHTML = index;
-    cell2.innerHTML = site;
-    if (!withinSchedule()){
-        cell3.innerHTML = "<button type=\"button\" id=\"removeSite" + index + "\">Remove</button>";
-        document.getElementById("removeSite" + index).addEventListener("click", removeSite(index));
-    }
+    cell1.innerHTML = site;
 }
-
 
 function removeSite(index){
-    // Remove it from table
-    const site = document.getElementById("blockedTable").rows[index-1].cells[1].innerHTML;
-
-    // Remove from internal list
-    blocked.delete(site);
-
-    table.deleteRow(index-1);
-
-    // Remove from local storage
-    saveSites();
+    document.getElementById("removeSite" + index).addEventListener("click", () => {
+        document.getElementById("blockedTable").deleteRow(index);
+        saveSites();
+    });
 }
 
-function saveSites(){ // this needs work
-    localStorage.clear();
+function update(){
+    const schedule = document.getElementById("setSchedule");
+    if (withinSchedule()){
+        schedule.innerHTML = "You cannot edit your schedule whilst it is active";
+        removeRemoval();
+    } else {
+        schedule.innerHTML = "<input type=\"time\" id=\"lowerBound\" required>"
+        + "<input type=\"time\" id=\"upperBound\" required>"
+        + "<button id=\"scheduleButton\">Set Schedule</button>";
+
+        document.getElementById("scheduleButton").addEventListener("click", setSchedule);
+
+        addRemoval();
+    }
+}
+
+function addRemoval(){
+    const rows = document.getElementById("blockedTable").rows;
+    for (let i = 0; i < rows.length; i++){
+        rows[i].cells[1].innerHTML = "<button type=\"button\" id=\"removeSite" + i + "\">Remove</button>";
+        document.getElementById("removeSite" + i).addEventListener("click", removeSite(i));
+    }
+}
+
+function removeRemoval(){
+    const rows = document.getElementById("blockedTable").rows;
+    for (let i = 0; i < rows.length; i++){
+        rows[i].cells[1].innerHTML = "";
+    }
+}
+
+function saveSites(){
+    let scheduleLower, scheduleUpper;
+    chrome.storage.local.get(["lowerBound"]).then((result) => {
+        scheduleLower = result.key;
+    });
+
+    chrome.storage.local.get(["upperBound"]).then((result) => {
+        scheduleUpper = result.key;
+    });
+
+    chrome.storage.local.clear();
+
     if (scheduleLower && scheduleUpper){
-        localStorage.setItem("lowerBound", scheduleLower);
-        localStorage.setItem("upperBound", scheduleUpper);
+        chrome.storage.local.set({ "lowerBound": lowerBound }).then(() => {});
+        chrome.storage.local.set({ "upperBound": upperBound }).then(() => {});
     }
 
-    if (blocked.length != 0){
-        localStorage.setItem("count", rowCount);
+    const count = tableCount();
+    chrome.storage.local.set({ "count": count }).then(() => {});
+    
+    if (count != 0){
         const rows = document.getElementById("blockedTable").rows;
-        for (let i = 0; i < rows.length; i++) {
+        for (let i = 0; i < count; i++) {
             rows[i].cells[0].innerHTML = i+1;
-            localStorage.setItem("site"+i+1, rows[i].cells[1].innerHTML);
+            let key = "site"+i+1;
+            let value = rows[i].cells[1].innerHTML;
+            chrome.storage.local.set({ key : value}).then(() => {});
         }
     }
 }
 
-
 function setSchedule(){
     const lowerBound = document.getElementById("lowerBound").value;
     const upperBound = document.getElementById("upperBound").value;
-    if (lowerBound && upperBound){
-        // Set internal variables
-        scheduleLower = lowerBound;
-        scheduleUpper = upperBound;
 
+    if (lowerBound && upperBound){
+        
         // Add to local storage
-        localStorage.setItem("lowerBound", scheduleLower);
-        localStorage.setItem("upperBound", scheduleUpper);
+        chrome.storage.local.set({ 'lowerBound': lowerBound }).then(() => {});
+        chrome.storage.local.set({ 'upperBound': upperBound }).then(() => {});
 
         // update current schedule
-        document.getElementById("currentSchedule").innerHTML = scheduleLower + " to " + scheduleUpper;
+        document.getElementById("currentSchedule").innerHTML = lowerBound + " to " + upperBound;
+
+        update();
+        
     }
-    update();
+
 }
 
-
 function withinSchedule(){
+    let scheduleLower, scheduleUpper;
+    chrome.storage.local.get(["lowerBound"]).then((result) => {
+        scheduleLower = result.key;
+    });
+    chrome.storage.local.get(["upperBound"]).then((result) => {
+        scheduleUpper = result.key;
+    });
+
     if (scheduleLower && scheduleUpper){
         const lowerBound = Temporal.PlainTime.from(scheduleLower);
         const upperBound = Temporal.PlainTime.from(scheduleUpper);
@@ -146,51 +198,27 @@ function withinSchedule(){
     return false;
 }
 
-
-function checkCurrentSite(){
-    chrome.tabs.query({active: true, lastFocusedWindow: true}, tabs => {
-        const url = new URL(tabs[0].url).hostname;
-        if (blocked.includes(url) && withinSchedule()){
-            console.log("blocked site");
-            chrome.tabs.remove(
-                tabs[0].id,
-            ).catch(function(e){console.log(e)});
-        }
+function siteIsBlocked(url){
+    let count;
+    chrome.storage.local.get(["count"]).then((result) => {
+        count = result.key;
     });
-}
-
-
-function update(){
-
-    const schedule = document.getElementById("setSchedule");
-    const tableRows = document.getElementById("blockedTable").rows;
-
-    if (!withinSchedule()){
-
-        schedule.innerHTML = "<input type=\"time\" id=\"lowerBound\">"
-        + "<input type=\"time\" id=\"upperBound\">"
-        + "<button id=\"scheduleButton\">Set Schedule</button>";
-
-        document.getElementById("scheduleButton").addEventListener("click", setSchedule);
-
-
-        // Replace nothing with removal button
-        for (let i = 0; i < tableRows.length; i++){
-            tableRows[i].cells[2].innerHTML = "<button type=\"button\" id=\"removeSite" + i+1 + "\">Remove</button>";
-            document.getElementById("removeSite" + i+1).addEventListener("click", removeSite(i+1));
-        }
-
-    } else {
-
-        schedule.innerHTML = "You cannot edit your schedule whilst it is active";
-
-        // Replace removal button from each row with nothing
-        for (let i = 0; i < tableRows.length; i++){
-            tableRows[i].cells[2].innerHTML = "";
-        }
-
-    }
     
+    if (count){
+        let site;
+        for (let i = count; i > 0; i--){
+            let key = "site" + i;
+            chrome.storage.local.get([key]).then((result) => {
+                site = result.key;
+            });
+            if (site === String(url).substring(4)) {
+                return true;
+            }
+                
+        }
+    }
+
+    return false;
 }
 
 /*
