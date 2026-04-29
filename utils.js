@@ -21,13 +21,12 @@ export async function withinSchedule(){
 export async function siteIsBlocked(url){
     const result = await chrome.storage.local.get(["count"]);
     const count = result.count;
-
-    if (count){
+    if (count && count !== 0){
         for (let i = 0; i < count; i++){
             let key = "site" + i;
             let result = await chrome.storage.local.get([key]);
             let site = result[key];
-            if (site === String(url).substring(4)) {
+            if (new URL("https://" + site).hostname === url) {
                 return true;
             }
                 

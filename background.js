@@ -4,10 +4,11 @@ chrome.tabs.onUpdated.addListener((tabId, info, tab) => checkSite(tabId, info, t
 
 async function checkSite(tabId, info, tab){
     if (info.url || info.status === 'loading') {
-        const url = info.url || tab.pendingUrl || tab.url;
+        const rawUrl = info.url || tab.pendingUrl || tab.url;
+        const url = rawUrl.split(".")[1] + "." + rawUrl.split(".")[2].split("/")[0];
         const isBlocked = await siteIsBlocked(url);
         const isWithin = await withinSchedule();
-
+        
         if (isBlocked && isWithin){
                 chrome.tabs.remove(
                     tabId,
